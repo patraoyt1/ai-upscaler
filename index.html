@@ -1,66 +1,150 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <title>AI Local Upscaler - Versão de Diagnóstico</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/upscaler@0.14.1/dist/browser/umd/upscaler.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-slim@0.3.1/dist/browser/umd/index.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESRGAN Local</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+
+<style>
+body{
+    background:#111827;
+    color:white;
+    font-family:Arial;
+    text-align:center;
+    padding:20px;
+}
+
+button{
+    padding:10px 20px;
+    background:#2563eb;
+    color:white;
+    border:none;
+    border-radius:8px;
+    cursor:pointer;
+}
+
+img{
+    max-width:400px;
+    margin-top:15px;
+    border-radius:8px;
+}
+</style>
 </head>
-<body class="bg-slate-900 text-white p-6">
-    <div x-data="upscalerApp()" x-init="tentarInicializar()" class="max-w-2xl mx-auto text-center">
-        <h1 class="text-xl font-bold mb-4" x-text="status"></h1>
-        <p class="text-xs text-gray-400" x-text="debugInfo"></p>
-    </div>
 
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <script>
-        function upscalerApp() {
-            return {
-                status: 'Buscando biblioteca...',
-                debugInfo: '',
+<body>
 
-                async tentarInicializar() {
-                    // Espera 1s para garantir o carregamento
-                    setTimeout(() => {
-                        // Varredura para encontrar a classe Upscaler
-                        const nomesPossiveis = ['Upscaler', 'UpscalerJS', 'Upscalerjs', 'upscaler'];
-                        let UpscalerLib = null;
+<h1 id="status">Carregando IA...</h1>
 
-                        for (let nome of nomesPossiveis) {
-                            if (window[nome]) {
-                                UpscalerLib = window[nome];
-                                this.debugInfo = `Encontrado: ${nome}`;
-                                break;
-                            }
-                        }
+<input type="file" id="upload" accept="image/*">
 
-                        if (!UpscalerLib) {
-                            // DEBUG FINAL: Listar tudo que parece com upscaler
-                            const matches = Object.keys(window).filter(k => k.toLowerCase().includes('upscaler'));
-                            this.status = 'Falha: Biblioteca não encontrada.';
-                            this.debugInfo = 'Variáveis encontradas: ' + JSON.stringify(matches);
-                            console.error("Nenhuma variável 'Upscaler' encontrada no window.");
-                            return;
-                        }
+<br><br>
 
-                        this.status = 'Biblioteca encontrada! Inicializando...';
-                        try {
-                            // Tenta carregar o modelo ESRGAN
-                            const model = window['esrgan-slim'] || window.esrganSlim || {};
-                            this.upscaler = new UpscalerLib({ model: model.x2 });
-                            await this.upscaler.getModel();
-                            this.status = 'IA PRONTA!';
-                        } catch (e) {
-                            this.status = 'Erro ao carregar modelo.';
-                            this.debugInfo = e.message;
-                        }
-                    }, 1000);
-                }
-            }
-        }
-    </script>
+<button id="processar" disabled>
+Fazer Upscale
+</button>
+
+<br>
+
+<h3>Original</h3>
+<img id="original">
+
+<h3>Resultado</h3>
+<canvas id="resultado"></canvas>
+
+<script>
+
+let model = null;
+let imageElement = null;
+
+async function carregarModelo() {
+
+    try {
+
+        document.getElementById("status").innerText =
+        "Carregando modelo ESRGAN...";
+
+        model = await tf.loadGraphModel(
+            "./models/esrgan/model.json"
+        );
+
+        document.getElementById("status").innerText =
+        "Modelo carregado.";
+
+        document.getElementById("processar").disabled = false;
+
+    }
+    catch(err){
+
+        console.error(err);
+
+        document.getElementById("status").innerText =
+        "Erro ao carregar modelo.";
+    }
+}
+
+carregarModelo();
+
+document.getElementById("upload")
+.addEventListener("change",(e)=>{
+
+    const file = e.target.files[0];
+
+    if(!file) return;
+
+    imageElement = document.getElementById("original");
+
+    imageElement.src = URL.createObjectURL(file);
+
+});
+
+document.getElementById("processar")
+.addEventListener("click", async ()=>{
+
+    if(!imageElement || !model) return;
+
+    document.getElementById("status").innerText =
+    "Processando...";
+
+    await tf.nextFrame();
+
+    const tensor = tf.tidy(()=>{
+
+        return tf.browser
+        .fromPixels(imageElement)
+        .toFloat()
+        .div(255)
+        .expandDims(0);
+
+    });
+
+    const output = await model.executeAsync(tensor);
+
+    const resultTensor =
+    Array.isArray(output)
+        ? output[0]
+        : output;
+
+    const squeezed = resultTensor.squeeze();
+
+    const canvas =
+    document.getElementById("resultado");
+
+    await tf.browser.toPixels(
+        squeezed.clipByValue(0,1),
+        canvas
+    );
+
+    tensor.dispose();
+    resultTensor.dispose();
+
+    document.getElementById("status").innerText =
+    "Concluído.";
+
+});
+
+</script>
+
 </body>
 </html>

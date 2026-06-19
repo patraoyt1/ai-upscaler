@@ -2,234 +2,55 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Local Image Upscaler</title>
-    
+    <title>AI Local Upscaler</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/upscaler@0.14.1/dist/browser/umd/upscaler.min.js"></script>
-    
     <script src="https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-slim@0.3.1/dist/browser/umd/index.min.js"></script>
-
-    <style>
-        body { background-color: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
-        [x-cloak] { display: none !important; }
-        .gradient-border {
-            background: linear-gradient(to right, #3b82f6, #8b5cf6);
-            padding: 1px;
-        }
-    </style>
 </head>
-<body class="flex flex-col items-center justify-center min-h-screen p-4 md:p-8">
-
-    <div x-data="upscalerApp()" x-init="inicializar()" class="w-full max-w-4xl space-y-6">
-        
-        <div class="text-center space-y-2">
-            <h1 class="text-3xl md:text-4xl font-black text-white tracking-tight flex items-center justify-center gap-3">
-                <i class="fa-solid fa-wand-magic-sparkles text-blue-500"></i> AI Super Res <span class="text-xs bg-blue-600/30 text-blue-400 border border-blue-500/30 px-2 py-1 rounded-md font-mono">LOCAL GPU</span>
-            </h1>
-            <p class="text-sm text-gray-400 max-w-md mx-auto">
-                Aumente a resolução das suas imagens em <span class="text-purple-400 font-bold">2x</span> usando inteligência artificial processada direto no seu hardware.
-            </p>
+<body class="bg-slate-900 text-white p-6">
+    <div x-data="upscalerApp()" x-init="inicializar()" class="max-w-2xl mx-auto text-center">
+        <h1 class="text-2xl font-bold mb-4" x-text="statusTexto"></h1>
+        <input type="file" @change="carregarImagem($event)" accept="image/*" class="mb-4">
+        <div x-show="imgOriginalSrc">
+            <img :src="imgOriginalSrc" class="max-w-xs mx-auto mb-4 border border-blue-500">
+            <button @click="processar()" class="bg-blue-600 px-6 py-2 rounded">Processar Imagem</button>
         </div>
-
-        <div x-show="carregandoModelo" class="bg-blue-950/40 border border-blue-800/50 p-4 rounded-xl flex items-center gap-3 text-sm text-blue-300">
-            <i class="fa-solid fa-circle-notch fa-spin text-lg"></i>
-            <div>
-                <span class="font-bold">Inicializando IA local...</span> Ativando aceleração de hardware do navegador. Aguarde.
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            <div class="bg-gray-900 rounded-2xl border border-gray-800 p-5 flex flex-col justify-between min-h-[350px]">
-                <div class="space-y-4">
-                    <h3 class="text-xs font-bold uppercase tracking-wider text-gray-500 flex items-center gap-2">
-                        <i class="fa-solid fa-file-image"></i> Imagem Original
-                    </h3>
-                    
-                    <div x-show="!imgOriginalSrc" 
-                         @click="$refs.fileInput.click()" 
-                         @dragover.prevent="arrastando = true"
-                         @dragleave.prevent="arrastando = false"
-                         @drop.prevent="tratarDrop($event)"
-                         :class="arrastando ? 'border-blue-500 bg-blue-950/20' : 'border-gray-700 hover:border-gray-600 bg-gray-950/50'"
-                         class="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition flex flex-col items-center justify-center min-h-[220px]">
-                        <i class="fa-solid fa-cloud-arrow-up text-gray-600 text-4xl mb-3"></i>
-                        <p class="text-sm font-medium text-gray-300">Arraste sua imagem ou clique para buscar</p>
-                    </div>
-                    
-                    <input type="file" x-ref="fileInput" @change="carregarImagem($event)" accept="image/*" class="hidden">
-
-                    <div x-show="imgOriginalSrc" class="relative rounded-xl overflow-hidden bg-black/40 flex items-center justify-center max-h-[280px]">
-                        <img :src="imgOriginalSrc" class="max-h-[250px] object-contain rounded">
-                        <button @click="limpar()" class="absolute top-2 right-2 bg-red-600/80 hover:bg-red-600 p-2 text-white text-xs rounded-lg transition">
-                            <i class="fa-solid fa-trash"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <div x-show="imgOriginalSrc" class="pt-4 border-t border-gray-800/60 mt-4 space-y-3">
-                    <div class="flex justify-between text-xs text-gray-400 font-mono">
-                        <span>Dimensões originais:</span>
-                        <span class="text-white font-bold" x-text="dimensoesOriginais"></span>
-                    </div>
-                    <button @click="processarUpscale()" 
-                            :disabled="carregandoModelo || processando"
-                            class="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2 shadow-lg disabled:opacity-50">
-                        <span x-show="!processando"><i class="fa-solid fa-bolt"></i> Aumentar Resolução (2x)</span>
-                        <span x-show="processando" class="flex items-center gap-2">
-                            <i class="fa-solid fa-circle-notch fa-spin"></i> Processando via GPU Local (<span x-text="progresso + '%'"></span>)
-                        </span>
-                    </button>
-                </div>
-            </div>
-
-            <div class="bg-gray-900 rounded-2xl border border-gray-800 p-5 flex flex-col justify-between min-h-[350px]">
-                <div class="space-y-4">
-                    <h3 class="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-2">
-                        <i class="fa-solid fa-sparkles"></i> Resultado Inteligente
-                    </h3>
-
-                    <div x-show="!imgResultadoSrc" class="border border-gray-800 bg-gray-950/20 rounded-xl p-8 text-center flex flex-col items-center justify-center min-h-[220px]">
-                        <template x-if="!processando">
-                            <div class="text-gray-600 text-center">
-                                <i class="fa-solid fa-eye-slash text-3xl mb-2 block"></i>
-                                <p class="text-sm">Aguardando processamento original.</p>
-                            </div>
-                        </template>
-                        <template x-if="processando">
-                            <div class="w-full space-y-3 px-4">
-                                <div class="text-blue-400 text-xs font-mono font-bold uppercase tracking-widest animate-pulse">Renderizando com IA...</div>
-                                <div class="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
-                                    <div class="bg-purple-500 h-2 rounded-full transition-all duration-300" :style="`width: ${progresso}%`"></div>
-                                </div>
-                            </div>
-                        </template>
-                    </div>
-
-                    <div x-show="imgResultadoSrc" class="gradient-border rounded-xl shadow-2xl">
-                        <div class="relative overflow-hidden bg-black/40 flex items-center justify-center max-h-[280px] rounded-xl">
-                            <img :src="imgResultadoSrc" class="max-h-[250px] object-contain rounded">
-                        </div>
-                    </div>
-                </div>
-
-                <div x-show="imgResultadoSrc" class="pt-4 border-t border-gray-800/60 mt-4 space-y-3">
-                    <div class="flex justify-between text-xs text-gray-400 font-mono">
-                        <span>Novas dimensões:</span>
-                        <span class="text-purple-400 font-bold" x-text="dimensoesFinais"></span>
-                    </div>
-                    <button @click="baixarResultado()" 
-                            class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2 shadow-lg">
-                        <i class="fa-solid fa-download"></i> Baixar Imagem Ultra-HD
-                    </button>
-                </div>
-            </div>
-
-        </div>
+        <img :src="imgResultadoSrc" class="max-w-xs mx-auto mt-4 border border-green-500">
     </div>
 
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script>
         function upscalerApp() {
             return {
                 upscaler: null,
-                carregandoModelo: true,
-                processando: false,
-                arrastando: false,
-                progresso: 0,
+                statusTexto: 'Carregando IA... aguarde...',
                 imgOriginalSrc: '',
                 imgResultadoSrc: '',
-                dimensoesOriginais: '0 x 0',
-                dimensoesFinais: '0 x 0',
-                nomeArquivoOriginal: 'imagem_upscaled',
 
                 async inicializar() {
                     try {
-                        // Passamos explicitamente o modelo ESRGAN Slim injetado via tag script
-                        this.upscaler = new Upscaler({
-                            model: window['esrgan-slim'].x2
-                        });
-                        this.carregandoModelo = false;
-                    } catch (error) {
-                        console.error("Erro:", error);
+                        this.upscaler = new Upscaler({ model: window['esrgan-slim'].x2 });
+                        await this.upscaler.getModel();
+                        this.statusTexto = 'IA Pronta! Selecione uma imagem.';
+                    } catch (e) {
+                        this.statusTexto = 'Erro ao carregar IA. Verifique o console (F12).';
+                        console.error(e);
                     }
                 },
-
-                carregarImagem(event) {
-                    const arquivo = event.target.files[0];
-                    if (arquivo) this.lerArquivo(arquivo);
-                },
-
-                tratarDrop(event) {
-                    this.arrastando = false;
-                    const arquivo = event.dataTransfer.files[0];
-                    if (arquivo && arquivo.type.startsWith('image/')) this.lerArquivo(arquivo);
-                },
-
-                lerArquivo(arquivo) {
-                    this.nomeArquivoOriginal = arquivo.name.split('.').slice(0, -1).join('.');
+                carregarImagem(e) {
                     const reader = new FileReader();
-                    reader.onload = (e) => {
-                        this.imgOriginalSrc = e.target.result;
-                        this.imgResultadoSrc = '';
-                        const img = new Image();
-                        img.onload = () => { this.dimensoesOriginais = `${img.width} x ${img.height} px`; };
-                        img.src = e.target.result;
+                    reader.onload = (event) => { this.imgOriginalSrc = event.target.result; };
+                    reader.readAsDataURL(e.target.files[0]);
+                },
+                async processar() {
+                    this.statusTexto = 'Processando...';
+                    const img = new Image();
+                    img.src = this.imgOriginalSrc;
+                    img.onload = async () => {
+                        this.imgResultadoSrc = await this.upscaler.upscale(img);
+                        this.statusTexto = 'Concluído!';
                     };
-                    reader.readAsDataURL(arquivo);
-                },
-
-                async processarUpscale() {
-                    if (!this.imgOriginalSrc || this.processando) return;
-                    
-                    this.processando = true;
-                    this.progresso = 0;
-
-                    const imgInput = new Image();
-                    imgInput.src = this.imgOriginalSrc;
-                    
-                    imgInput.onload = async () => {
-                        try {
-                            const resultadoDataUrl = await this.upscaler.upscale(imgInput, {
-                                patchSize: 64,
-                                padding: 4,
-                                progress: (amount) => { this.progresso = Math.round(amount * 100); }
-                            });
-
-                            this.imgResultadoSrc = resultadoDataUrl;
-                            const imgOutput = new Image();
-                            imgOutput.onload = () => { this.dimensoesFinais = `${imgOutput.width} x ${imgOutput.height} px`; };
-                            imgOutput.src = resultadoDataUrl;
-
-                        } catch (err) {
-                            console.error(err);
-                            alert("Erro de hardware. Imagem muito grande para a memória local ou navegador incompatível com WebGL.");
-                        } finally {
-                            this.processando = false;
-                        }
-                    };
-                },
-
-                baixarResultado() {
-                    if (!this.imgResultadoSrc) return;
-                    const link = document.createElement('a');
-                    link.href = this.imgResultadoSrc;
-                    link.download = `${this.nomeArquivoOriginal}_2x_HD.png`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                },
-
-                limpar() {
-                    this.imgOriginalSrc = '';
-                    this.imgResultadoSrc = '';
-                    this.dimensoesOriginais = '0 x 0';
-                    this.dimensoesFinais = '0 x 0';
-                    this.progresso = 0;
-                    if (this.$refs.fileInput) this.$refs.fileInput.value = '';
                 }
             }
         }

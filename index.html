@@ -4,19 +4,26 @@
     <meta charset="UTF-8">
     <title>AI Local Upscaler</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/upscaler@0.14.1/dist/browser/umd/upscaler.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-slim@0.3.1/dist/browser/umd/index.min.js"></script>
 </head>
 <body class="bg-slate-900 text-white p-6">
     <div x-data="upscalerApp()" x-init="inicializar()" class="max-w-2xl mx-auto text-center">
-        <h1 class="text-2xl font-bold mb-4" x-text="statusTexto"></h1>
-        <input type="file" @change="carregarImagem($event)" accept="image/*" class="mb-4">
+        <h1 class="text-xl font-bold mb-4" x-text="status"></h1>
+        
+        <input type="file" @change="carregarImagem($event)" accept="image/*" class="mb-4 p-2 bg-slate-800 rounded">
+        
         <div x-show="imgOriginalSrc">
-            <img :src="imgOriginalSrc" class="max-w-xs mx-auto mb-4 border border-blue-500">
-            <button @click="processar()" class="bg-blue-600 px-6 py-2 rounded">Processar Imagem</button>
+            <img :src="imgOriginalSrc" class="max-w-xs mx-auto mb-4 border border-blue-500 rounded">
+            <button @click="processar()" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded font-bold transition">Processar Imagem</button>
         </div>
-        <img :src="imgResultadoSrc" class="max-w-xs mx-auto mt-4 border border-green-500">
+
+        <div x-show="imgResultadoSrc" class="mt-6">
+            <p class="mb-2 text-green-400 font-bold">Resultado:</p>
+            <img :src="imgResultadoSrc" class="max-w-xs mx-auto border border-green-500 rounded">
+        </div>
     </div>
 
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -24,17 +31,24 @@
         function upscalerApp() {
             return {
                 upscaler: null,
-                statusTexto: 'Carregando IA... aguarde...',
+                status: 'Carregando...',
                 imgOriginalSrc: '',
                 imgResultadoSrc: '',
 
                 async inicializar() {
                     try {
-                        this.upscaler = new Upscaler({ model: window['esrgan-slim'].x2 });
-                        await this.upscaler.getModel();
-                        this.statusTexto = 'IA Pronta! Selecione uma imagem.';
+                        // Verifica se o objeto Upscaler existe na variável global
+                        if (typeof Upscaler !== 'undefined') {
+                            this.upscaler = new Upscaler({
+                                model: window['esrgan-slim'].x2
+                            });
+                            this.status = 'IA Pronta! Escolha uma imagem.';
+                        } else {
+                            // Se falhar, tenta acessar pelo namespace do bundle
+                            this.status = 'Erro: Upscaler não carregou.';
+                        }
                     } catch (e) {
-                        this.statusTexto = 'Erro ao carregar IA. Verifique o console (F12).';
+                        this.status = 'Erro no script: ' + e.message;
                         console.error(e);
                     }
                 },
@@ -44,12 +58,17 @@
                     reader.readAsDataURL(e.target.files[0]);
                 },
                 async processar() {
-                    this.statusTexto = 'Processando...';
+                    this.status = 'Processando... (pode demorar)';
                     const img = new Image();
                     img.src = this.imgOriginalSrc;
                     img.onload = async () => {
-                        this.imgResultadoSrc = await this.upscaler.upscale(img);
-                        this.statusTexto = 'Concluído!';
+                        try {
+                            const data = await this.upscaler.upscale(img);
+                            this.imgResultadoSrc = data;
+                            this.status = 'Upscale Concluído!';
+                        } catch (err) {
+                            this.status = 'Erro ao processar: ' + err.message;
+                        }
                     };
                 }
             }
